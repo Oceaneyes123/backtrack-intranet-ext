@@ -1,0 +1,9 @@
+{
+  "manifest_version": 3,
+  "name": "Backtrack New Tab Redirect",
+  "version": "1.0.0",
+  "description": "Redirects new tab pages to backtrack.com.",
+  "chrome_url_overrides": {
+    "newtab": "newtab.html"
+  }
+}
