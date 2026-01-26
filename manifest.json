@@ -1,8 +1,14 @@
 {
   "manifest_version": 3,
-  "name": "Backtrack New Tab Redirect",
+  "name": "Backtrack Intranet",
   "version": "1.0.0",
-  "description": "Redirects new tab pages to backtrack.com.",
+  "description": "Backtrack Intranet",
+  "icons": {
+    "16": "icon.png",
+    "32": "icon.png",
+    "48": "icon.png",
+    "128": "icon.png"
+  },
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   }
