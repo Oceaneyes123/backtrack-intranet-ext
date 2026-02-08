@@ -13,7 +13,42 @@
     "default_title": "Backtrack Intranet",
     "default_popup": "popup.html"
   },
-  "permissions": ["storage"],
+  "permissions": ["storage", "identity"],
+  "host_permissions": [
+    "https://sites.google.com/backtrack.com/*",
+    "http://localhost:8787/*",
+    "https://localhost:8787/*"
+  ],
+  "oauth2": {
+    "client_id": "1023550288660-g2s2vq1tdvoo4oble5f8i9k7ajj38q3e.apps.googleusercontent.com",
+    "scopes": ["openid", "email", "profile"]
+  },
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://sites.google.com/backtrack.com/*"],
+      "js": [
+        "shared/settings.js",
+        "shared/chrome.js",
+        "chat/utils.js",
+        "chat/core.js",
+        "chat/storage.js",
+        "chat/auth.js",
+        "chat/api.js",
+        "chat/render.js",
+        "chat/operations.js",
+        "chat/connection.js",
+        "chat/ui.styles.js",
+        "chat/ui.template.js",
+        "chat/ui.panel.js",
+        "chat/widget.js",
+        "contentScript.js"
+      ]
+    }
+  ],
   "chrome_url_overrides": {
     "newtab": "newtab.html"
   }

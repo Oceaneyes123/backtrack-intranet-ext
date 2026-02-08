@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Backtrack Intranet</title>
     <link rel="stylesheet" href="popup.css" />
+    <script src="shared/settings.js" defer></script>
+    <script src="shared/chrome.js" defer></script>
     <script src="popup.js" defer></script>
   </head>
   <body>
@@ -21,6 +23,33 @@
           <input id="toggle" type="checkbox" />
           <span class="slider"></span>
         </label>
+      </div>
+      <div class="divider"></div>
+      <div class="toggle-container">
+        <div class="toggle-info">
+          <span class="toggle-label">Chat Widget</span>
+          <span class="toggle-description">Show the Backtrack chat widget on intranet pages</span>
+        </div>
+        <label class="switch" aria-label="Toggle chat widget">
+          <input id="chat-enabled" type="checkbox" />
+          <span class="slider"></span>
+        </label>
+      </div>
+      <div class="field">
+        <label for="chat-api-url">Chat backend URL</label>
+        <input id="chat-api-url" type="url" inputmode="url" placeholder="http://localhost:8787" />
+        <p class="help">For local dev, run the backend and keep this at localhost.</p>
+      </div>
+      <div class="divider"></div>
+      <div class="auth-row">
+        <div class="toggle-info">
+          <span class="toggle-label">Google SSO</span>
+          <span class="toggle-description" id="auth-status">Signed out</span>
+        </div>
+        <div class="auth-actions">
+          <button id="auth-signin" class="btn">Sign in</button>
+          <button id="auth-signout" class="btn btn-ghost">Sign out</button>
+        </div>
       </div>
     </main>
   </body>

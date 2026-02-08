@@ -40,6 +40,18 @@ body {
   padding: 20px;
   box-shadow: 0 12px 30px rgba(0, 0, 0, 0.35);
   border: 1px solid rgba(255, 255, 255, 0.06);
+  animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 .toggle-container {
@@ -66,6 +78,97 @@ body {
   font-size: 10px;
   color: var(--muted);
   line-height: 1.4;
+}
+
+.divider {
+  height: 1px;
+  background: rgba(255, 255, 255, 0.08);
+  margin: 16px 0;
+}
+
+.field {
+  margin-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.field label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.field input {
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 10px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-size: 12px;
+  outline: none;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease, background 0.2s ease;
+}
+
+.field input:hover {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-weak);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.help {
+  margin: 0;
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.auth-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.auth-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.btn {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  border-radius: 10px;
+  padding: 6px 10px;
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease, opacity 0.2s ease;
+}
+
+.btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(232, 119, 34, 0.3);
+}
+
+.btn:active {
+  transform: translateY(0);
+}
+
+.btn-ghost {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  color: var(--text);
+}
+
+.btn-ghost:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: none;
 }
 
 
@@ -112,8 +215,21 @@ body {
   box-shadow: 0 0 0 6px var(--accent-weak);
 }
 
+.switch input:focus-visible + .slider {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .switch input:checked + .slider::before {
   transform: translateX(22px);
+}
+
+.switch:hover .slider {
+  background-color: #4a4f5b;
+}
+
+.switch:hover input:checked + .slider {
+  background-color: #f08532;
 }
 
 @media (prefers-color-scheme: light) {
@@ -124,5 +240,80 @@ body {
     --muted: #5a6472;
     --accent: #e87722;
     --accent-weak: rgba(232, 119, 34, 0.2);
+  }
+}
+
+/* Smooth transitions for theme changes */
+body, .card, .field input, .btn, .slider {
+  transition-property: background-color, color, border-color;
+  transition-duration: 0.3s;
+  transition-timing-function: ease;
+}
+
+/* Focus visible styles for accessibility */
+*:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+/* Smooth scrolling */
+body {
+  scroll-behavior: smooth;
+}
+
+/* Stagger animation for UI elements */
+.toggle-container:nth-child(1) {
+  animation: slideIn 0.3s ease-out;
+}
+
+.toggle-container:nth-child(2) {
+  animation: slideIn 0.3s ease-out 0.1s backwards;
+}
+
+.field {
+  animation: slideIn 0.3s ease-out 0.2s backwards;
+}
+
+.auth-row {
+  animation: slideIn 0.3s ease-out 0.3s backwards;
+}
+
+/* Reduce motion for accessibility */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+  
+  .card {
+    animation: none;
+  }
+}
+
+/* Hover state for toggle containers */
+.toggle-container {
+  padding: 4px;
+  margin: -4px;
+  border-radius: 10px;
+  transition: background 0.2s ease;
+}
+
+.toggle-container:hover {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+/* Title animation */
+.title {
+  animation: fadeIn 0.4s ease-out;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
   }
 }
