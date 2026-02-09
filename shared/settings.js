@@ -2,7 +2,7 @@
   const DEFAULTS = {
     rerouteEnabled: true,
     chatEnabled: true,
-    chatApiUrl: "http://localhost:8787"
+    chatApiUrl: "https://backtrack-intranet-backend.onrender.com"
   };
 
   if (!globalThis.BT_DEFAULTS) {

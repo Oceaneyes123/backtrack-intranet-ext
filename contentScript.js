@@ -3,13 +3,13 @@
 
 const DEFAULTS = globalThis.BT_DEFAULTS || {
   chatEnabled: true,
-  chatApiUrl: "http://localhost:8787"
+  chatApiUrl: ""
 };
 
 let currentSettings = { ...DEFAULTS };
 
 const applySettings = (next = {}, { apiUrlChanged = false } = {}) => {
-  currentSettings = { ...currentSettings, ...next };
+  currentSettings = { ...currentSettings, ...next, chatApiUrl: DEFAULTS.chatApiUrl };
   const { chatEnabled, chatApiUrl } = currentSettings;
 
   try {
@@ -53,10 +53,6 @@ if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
     const next = {};
     let apiUrlChanged = false;
     if (changes.chatEnabled) next.chatEnabled = changes.chatEnabled.newValue;
-    if (changes.chatApiUrl) {
-      next.chatApiUrl = changes.chatApiUrl.newValue;
-      apiUrlChanged = true;
-    }
     if (!Object.keys(next).length) return;
     applySettings(next, { apiUrlChanged });
   });

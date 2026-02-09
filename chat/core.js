@@ -1,4 +1,4 @@
-let API_URL = "http://localhost:8787";
+let API_URL = globalThis.BT_DEFAULTS?.chatApiUrl || "";
 const setApiUrl = (nextUrl) => {
   const v = String(nextUrl || "").trim();
   if (!v) return;

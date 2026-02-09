@@ -1,20 +1,17 @@
 const rerouteToggle = document.getElementById("toggle");
 const chatEnabledToggle = document.getElementById("chat-enabled");
-const chatApiUrlInput = document.getElementById("chat-api-url");
 const authStatus = document.getElementById("auth-status");
 const authSignin = document.getElementById("auth-signin");
 const authSignout = document.getElementById("auth-signout");
 
 const DEFAULTS = globalThis.BT_DEFAULTS || {
   rerouteEnabled: true,
-  chatEnabled: true,
-  chatApiUrl: "http://localhost:8787"
+  chatEnabled: true
 };
 
 const updateUi = (settings) => {
   if (rerouteToggle) rerouteToggle.checked = settings.rerouteEnabled;
   if (chatEnabledToggle) chatEnabledToggle.checked = settings.chatEnabled;
-  if (chatApiUrlInput) chatApiUrlInput.value = settings.chatApiUrl || "";
 };
 
 safeStorageGet("sync", DEFAULTS, (settings) => {
@@ -33,19 +30,9 @@ chatEnabledToggle.addEventListener("change", () => {
   safeStorageSet("sync", { chatEnabled: chatEnabledToggle.checked }, () => {
     updateUi({
       ...DEFAULTS,
-      chatEnabled: chatEnabledToggle.checked,
-      chatApiUrl: chatApiUrlInput.value
+      chatEnabled: chatEnabledToggle.checked
     });
   });
-});
-
-let urlSaveTimer = null;
-chatApiUrlInput.addEventListener("input", () => {
-  if (urlSaveTimer) clearTimeout(urlSaveTimer);
-  urlSaveTimer = setTimeout(() => {
-    const nextUrl = String(chatApiUrlInput.value || "").trim();
-    safeStorageSet("sync", { chatApiUrl: nextUrl });
-  }, 250);
 });
 
 const refreshAuthStatus = () => {

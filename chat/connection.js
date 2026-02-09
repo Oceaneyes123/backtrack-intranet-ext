@@ -118,6 +118,15 @@ const connectSse = async (roomId = state.currentRoom) => {
 
   if (!res || !res.ok || !res.body) {
     if (connectSeq !== sseConnectSeq || controller.signal.aborted || !reconnectEnabled) return;
+    if (res?.status === 401) {
+      await clearCachedToken();
+      setStatus("Sign in required");
+      return;
+    }
+    if (res?.status === 403) {
+      setStatus("Forbidden");
+      return;
+    }
     setStatus("SSE connection failed");
     scheduleSseReconnect(roomId);
     return;

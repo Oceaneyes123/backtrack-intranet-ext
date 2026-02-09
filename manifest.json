@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Backtrack Intranet",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Backtrack Intranet",
   "icons": {
     "16": "icon.png",
@@ -17,7 +17,8 @@
   "host_permissions": [
     "https://sites.google.com/backtrack.com/*",
     "http://localhost:8787/*",
-    "https://localhost:8787/*"
+    "https://localhost:8787/*",
+    "https://backtrack-intranet-backend.onrender.com/*"
   ],
   "oauth2": {
     "client_id": "1023550288660-g2s2vq1tdvoo4oble5f8i9k7ajj38q3e.apps.googleusercontent.com",
