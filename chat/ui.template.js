@@ -9,10 +9,7 @@ const BT_CHAT_TEMPLATE = `
     </div>
   </div>
   <div class="panel-banner" id="auth-banner" role="status" aria-live="polite">
-    <div class="text" id="auth-banner-text">Signed out. Sign in to use chat.</div>
-    <div class="actions">
-      <button class="btn primary" id="auth-banner-signin" type="button">Sign in</button>
-    </div>
+    <button class="btn primary" id="auth-banner-signin" type="button">Sign in</button>
   </div>
   <div class="screens" id="screens" data-screen="list">
     <section class="screen">

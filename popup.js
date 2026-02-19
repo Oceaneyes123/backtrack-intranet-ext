@@ -1,8 +1,5 @@
 const rerouteToggle = document.getElementById("toggle");
 const chatEnabledToggle = document.getElementById("chat-enabled");
-const authStatus = document.getElementById("auth-status");
-const authSignin = document.getElementById("auth-signin");
-const authSignout = document.getElementById("auth-signout");
 
 const DEFAULTS = globalThis.BT_DEFAULTS || {
   rerouteEnabled: true,
@@ -34,27 +31,3 @@ chatEnabledToggle.addEventListener("change", () => {
     });
   });
 });
-
-const refreshAuthStatus = () => {
-  safeSendMessage({ type: "bt-auth:status" }, (response) => {
-    if (!response?.ok) return;
-    const signedIn = response.authenticated;
-    if (authStatus) authStatus.textContent = signedIn ? "Signed in" : "Signed out";
-    if (authSignin) authSignin.style.display = signedIn ? "none" : "inline-flex";
-    if (authSignout) authSignout.style.display = signedIn ? "inline-flex" : "none";
-  });
-};
-
-authSignin.addEventListener("click", () => {
-  safeSendMessage({ type: "bt-auth:get-token", interactive: true }, () => {
-    refreshAuthStatus();
-  });
-});
-
-authSignout.addEventListener("click", () => {
-  safeSendMessage({ type: "bt-auth:sign-out" }, () => {
-    refreshAuthStatus();
-  });
-});
-
-refreshAuthStatus();

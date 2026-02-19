@@ -60,12 +60,14 @@ const installFocusTrap = () => {
 
 const refreshAuthUi = async () => {
   const banner = $("auth-banner");
-  const bannerText = $("auth-banner-text");
   const signinBtn = $("auth-banner-signin");
   const userPill = $("user-pill");
   const signoutBtn = $("signout-btn");
+  const screens = $("screens");
+  const newBtn = $("new-btn");
+  const groupCreate = $("group-create");
 
-  if (!banner || !bannerText || !signinBtn || !userPill || !signoutBtn) return;
+  if (!banner || !signinBtn || !userPill || !signoutBtn) return;
 
   const signedIn = Boolean(state.currentUserEmail);
   if (typeof setAuthState === "function") {
@@ -74,13 +76,41 @@ const refreshAuthUi = async () => {
   banner.classList.toggle("show", !signedIn);
   userPill.classList.toggle("hidden", !signedIn);
   signoutBtn.classList.toggle("hidden", !signedIn);
+  screens?.classList.toggle("hidden", !signedIn);
+  newBtn?.classList.toggle("hidden", !signedIn);
+  groupCreate?.classList.toggle("hidden", !signedIn);
 
   if (signedIn) {
     userPill.textContent = sanitize(state.currentUserName || state.currentUserEmail);
+    signinBtn.disabled = false;
     return;
   }
+  signinBtn.disabled = false;
+};
 
-  bannerText.textContent = "Signed out. Sign in to send messages and view private chats.";
+const hydrateSignedInState = async ({ interactive = false } = {}) => {
+  if (!state.currentUserEmail) return false;
+
+  const data = await loadStorage();
+  state.chats = data[KEYS.chats] || [];
+  state.users = data[KEYS.users] || [];
+  const pendingData = await loadPendingStorage();
+  (pendingData[KEYS.pending] || []).forEach((p) => {
+    if (p?.clientMessageId) pendingSends.set(p.clientMessageId, p);
+  });
+  upsertUser(state.currentUserEmail, state.currentUserName);
+  await syncRoomsFromServer({ interactive, replace: true });
+  ensureGeneral();
+  await syncRoomsFromServer({ interactive: false });
+  restorePendingMessages();
+  updateQueueIndicator();
+  saveStorage();
+  renderChatList();
+  await syncUnreadCounts();
+  setScreen("list");
+  $("search")?.focus();
+
+  return true;
 };
 
 const renderChips = () => {
@@ -133,26 +163,9 @@ const openPanel = async () => {
   await syncProfile(false);
   await refreshAuthUi();
 
-  const data = await loadStorage();
-  state.chats = data[KEYS.chats] || [];
-  state.users = data[KEYS.users] || [];
-  const pendingData = await loadPendingStorage();
-  (pendingData[KEYS.pending] || []).forEach((p) => {
-    if (p?.clientMessageId) pendingSends.set(p.clientMessageId, p);
-  });
-  if (state.currentUserEmail) {
-    upsertUser(state.currentUserEmail, state.currentUserName);
-  }
-  await syncRoomsFromServer({ interactive: false, replace: true });
-  ensureGeneral();
-  await syncRoomsFromServer({ interactive: false });
-  restorePendingMessages();
-  updateQueueIndicator();
-  saveStorage();
-  renderChatList();
-  await syncUnreadCounts();
-  setScreen("list");
-  $("search")?.focus();
+  if (!state.currentUserEmail) return;
+
+  await hydrateSignedInState({ interactive: false });
 };
 
 const closePanel = () => {
@@ -204,6 +217,30 @@ const installGlobalListeners = () => {
   });
 };
 
+const onAuthStateChanged = async () => {
+  if (!widgetRoot || widgetRoot.style.display === "none") return;
+
+  const wasSignedIn = Boolean(state.currentUserEmail);
+  await syncProfile(false);
+  await refreshAuthUi();
+
+  if (!state.currentUserEmail) {
+    disconnect();
+    setScreen("list");
+    renderChatList();
+    return;
+  }
+
+  if (!isPanelOpen()) return;
+  if (!wasSignedIn) {
+    await hydrateSignedInState({ interactive: false });
+    return;
+  }
+
+  renderChatList();
+  await syncUnreadCounts();
+};
+
 const initializePanelUi = () => {
   if (panelInitialized) return;
   panelInitialized = true;
@@ -224,14 +261,12 @@ const initializePanelUi = () => {
   };
 
   $("auth-banner-signin").onclick = async () => {
+    const signinBtn = $("auth-banner-signin");
+    if (signinBtn) signinBtn.disabled = true;
     await syncProfile(true);
     await refreshAuthUi();
     if (state.currentUserEmail) {
-      upsertUser(state.currentUserEmail, state.currentUserName);
-      await syncRoomsFromServer({ interactive: true, replace: true });
-      saveStorage();
-      renderChatList();
-      await syncUnreadCounts();
+      await hydrateSignedInState({ interactive: true });
     }
   };
 
@@ -290,3 +325,4 @@ const initializePanelUi = () => {
 };
 
 globalThis.initializePanelUi = initializePanelUi;
+globalThis.onAuthStateChanged = onAuthStateChanged;

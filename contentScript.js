@@ -5,6 +5,7 @@ const DEFAULTS = globalThis.BT_DEFAULTS || {
   chatEnabled: true,
   chatApiUrl: ""
 };
+const AUTH_EVENT_KEY = "btAuthEvent";
 
 let currentSettings = { ...DEFAULTS };
 
@@ -49,11 +50,21 @@ safeStorageGet("sync", DEFAULTS, (settings) => {
 
 if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
   chrome.storage.onChanged.addListener((changes, area) => {
-    if (area !== "sync") return;
-    const next = {};
-    let apiUrlChanged = false;
-    if (changes.chatEnabled) next.chatEnabled = changes.chatEnabled.newValue;
-    if (!Object.keys(next).length) return;
-    applySettings(next, { apiUrlChanged });
+    if (area === "sync") {
+      const next = {};
+      let apiUrlChanged = false;
+      if (changes.chatEnabled) next.chatEnabled = changes.chatEnabled.newValue;
+      if (!Object.keys(next).length) return;
+      applySettings(next, { apiUrlChanged });
+      return;
+    }
+
+    if (area === "local" && changes[AUTH_EVENT_KEY]) {
+      try {
+        if (typeof onAuthStateChanged === "function") {
+          Promise.resolve(onAuthStateChanged()).catch(() => {});
+        }
+      } catch {}
+    }
   });
 }

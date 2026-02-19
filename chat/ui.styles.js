@@ -40,12 +40,9 @@ const BT_CHAT_STYLES = `
 .signout-btn { background: transparent; color: #8b949e; font-size: 16px; }
 .signout-btn:hover { color: #e6edf3; background: rgba(255,255,255,0.08); }
 
-.panel-banner { padding: 10px 12px; display: none; gap: 10px; align-items: center; justify-content: space-between; border-bottom: 1px solid rgba(255,255,255,0.08); background: rgba(232,119,34,0.08); opacity: 0; transform: translateY(-10px); transition: opacity 0.3s ease, transform 0.3s ease; }
+.panel-banner { display: none; flex: 1; align-items: center; justify-content: center; padding: 20px; background: transparent; opacity: 0; transform: translateY(-10px); transition: opacity 0.3s ease, transform 0.3s ease; }
 .panel-banner.show { display: flex; opacity: 1; transform: translateY(0); }
-.panel-banner .text { font-size: 12px; color: #e6edf3; line-height: 1.3; }
-.panel-banner .actions { display: flex; gap: 8px; }
-.panel-banner .btn { border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.08); color: #e6edf3; border-radius: 10px; padding: 6px 10px; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s ease; }
-.panel-banner .btn.primary { border-color: rgba(232,119,34,0.45); background: rgba(232,119,34,0.18); color: #e87722; }
+ .panel-banner .btn { border: 1px solid rgba(255,255,255,0.16); background: rgba(255,255,255,0.08); color: #e6edf3; border-radius: 14px; padding: 14px 26px; min-width: 180px; font-size: 18px; font-weight: 700; letter-spacing: 0.8px; text-transform: uppercase; cursor: pointer; transition: all 0.2s ease; }
 .panel-banner .btn:hover { background: rgba(255,255,255,0.12); transform: translateY(-1px); }
 .panel-banner .btn.primary:hover { background: rgba(232,119,34,0.25); }
 .panel-banner .btn:active { transform: translateY(0); }
@@ -59,7 +56,7 @@ const BT_CHAT_STYLES = `
   50% { box-shadow: 0 0 0 4px rgba(34,197,94,0.15); }
 }
 
-.screens { display: flex; width: 100%; height: 100%; --screen-index: 0; transform: translateX(calc(var(--screen-index) * -100%)); }
+.screens { display: flex; width: 100%; flex: 1; min-height: 0; --screen-index: 0; transform: translateX(calc(var(--screen-index) * -100%)); }
 
 .screen { flex: 0 0 100%; width: 100%; display: flex; flex-direction: column; background: #0d1117; overflow: hidden; }
 

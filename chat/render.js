@@ -462,7 +462,8 @@ const renderUsers = (listId, searchId, onSelect, options = {}) => {
     el.appendChild(item);
   });
 
-  if (showAdd && q.includes("@")) {
+  // Only allow the inline "Start DM" add entry when the user is signed in
+  if (showAdd && q.includes("@") && state.currentUserEmail) {
     const add = document.createElement("div");
     add.className = "user-item";
     add.setAttribute("role", "button");
