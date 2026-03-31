@@ -20,7 +20,7 @@ const BT_CHAT_TEMPLATE = `
       <div class="convo-header">
         <button class="back-btn" id="back-btn" aria-label="Back to chat list">←</button>
         <div class="convo-info">
-          <div class="convo-title" id="active-name">Chat <span class="online-chip offline" id="online-chip">Offline</span></div>
+          <div class="convo-title" id="active-name"><span id="active-name-label">Chat</span></div>
           <div class="status" id="status" aria-live="polite">Disconnected</div>
         </div>
       </div>
@@ -28,7 +28,10 @@ const BT_CHAT_TEMPLATE = `
       <div class="messages" id="messages"></div>
       <div class="typing" id="typing">Typing…</div>
       <form class="input-bar" id="form">
-        <input id="input" type="text" placeholder="Type a message…" autocomplete="off" aria-label="Message" />
+        <div class="composer-field">
+          <input id="input" type="text" placeholder="Type a message…" autocomplete="off" aria-label="Message" maxlength="4000" />
+        </div>
+        <button class="cancel-btn hidden" id="edit-cancel-btn" type="button" aria-label="Cancel editing">Cancel</button>
         <button class="send-btn" type="submit" aria-label="Send message">Send</button>
       </form>
     </section>
@@ -55,6 +58,12 @@ const BT_CHAT_TEMPLATE = `
     </section>
   </div>
   <button class="new-chat-fab" id="new-btn" title="New chat" aria-label="New chat">＋</button>
+  <div class="error-boundary hidden" id="error-boundary" role="alert">
+    <div class="error-boundary-content">
+      <p>Something went wrong.</p>
+      <button class="primary-btn" id="error-reload" type="button">Reload Widget</button>
+    </div>
+  </div>
 </div>
 `;
 

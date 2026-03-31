@@ -21,6 +21,7 @@ const {
   slugify,
   initials,
   getMessageKey,
+  canManageMessage,
   normalizeMessage,
   decodeJwt
 } = context;
@@ -43,6 +44,17 @@ test("getMessageKey prioritizes client ids", () => {
   assert.equal(getMessageKey({ id: "3" }), "3");
 });
 
+test("canManageMessage allows historical sent messages for the current user", () => {
+  assert.equal(canManageMessage({ id: 1, email: "alice@example.com" }, "alice@example.com"), true);
+  assert.equal(canManageMessage({ id: 1, email: "alice@example.com", status: "sent" }, "alice@example.com"), true);
+});
+
+test("canManageMessage blocks non-owned or unsent messages", () => {
+  assert.equal(canManageMessage({ id: 1, email: "alice@example.com" }, "bob@example.com"), false);
+  assert.equal(canManageMessage({ id: 1, email: "alice@example.com", status: "sending" }, "alice@example.com"), false);
+  assert.equal(canManageMessage({ id: 1, email: "alice@example.com", status: "failed" }, "alice@example.com"), false);
+});
+
 test("normalizeMessage maps backend fields", () => {
   const msg = normalizeMessage({
     id: 1,
@@ -50,6 +62,7 @@ test("normalizeMessage maps backend fields", () => {
     email: "alice@example.com",
     body: "Hi",
     created_at: "2024-01-01T00:00:00.000Z",
+    edited_at: "2024-01-01T00:01:00.000Z",
     client_message_id: "c1"
   });
   assert.equal(msg.id, 1);
@@ -57,6 +70,7 @@ test("normalizeMessage maps backend fields", () => {
   assert.equal(msg.email, "alice@example.com");
   assert.equal(msg.body, "Hi");
   assert.equal(msg.created_at, "2024-01-01T00:00:00.000Z");
+  assert.equal(msg.edited_at, "2024-01-01T00:01:00.000Z");
   assert.equal(msg.client_message_id, "c1");
 });
 

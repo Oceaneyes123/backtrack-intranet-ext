@@ -70,6 +70,14 @@ const api = {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body)
+  }, opts),
+  patch: (path, body, opts) => request(path, {
+    method: "PATCH",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body)
+  }, opts),
+  delete: (path, opts) => request(path, {
+    method: "DELETE"
   }, opts)
 };
 

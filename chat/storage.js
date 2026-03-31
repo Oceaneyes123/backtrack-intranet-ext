@@ -1,6 +1,12 @@
 // Storage
 const KEYS = { chats: "bt-chats", users: "bt-users", pending: "bt-pending" };
-const loadStorage = () => new Promise((r) => safeStorageGet("sync", KEYS, (res) => r(res || {})));
+const loadStorage = () => new Promise((r) => safeStorageGet("sync", KEYS, (res) => {
+  const data = res || {};
+  // F10: Validate storage shape — guard against corrupt data.
+  if (data[KEYS.chats] && !Array.isArray(data[KEYS.chats])) data[KEYS.chats] = [];
+  if (data[KEYS.users] && !Array.isArray(data[KEYS.users])) data[KEYS.users] = [];
+  r(data);
+}));
 
 let saveTimer = null;
 const flushStorageNow = () => {

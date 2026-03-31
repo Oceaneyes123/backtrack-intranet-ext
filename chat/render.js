@@ -7,17 +7,17 @@ const setAuthState = (signedIn) => {
   dot.setAttribute("title", signedIn ? "Signed in" : "Signed out");
 };
 const setConnectionState = (connected) => {
-  const chip = $("online-chip");
-  if (chip) {
-    chip.classList.toggle("online", connected);
-    chip.classList.toggle("offline", !connected);
-    chip.textContent = connected ? "Online" : "Offline";
-  }
   setStatus(connected ? "Connected" : "Disconnected");
   updateQueueIndicator();
 };
 
 let badgeUpdateTimer = null;
+let openMessageActions = null;
+let messageMenuDismissInstalled = false;
+let chatListRenderFrame = null;
+const READ_RECEIPT_IDLE_MS = 1000;
+const READ_RECEIPT_COOLDOWN_MS = 2000;
+const roomReadReceipts = new Map();
 const getTotalUnread = () => state.chats.reduce((sum, c) => sum + (Number(c.unread) || 0), 0);
 const updateBadges = () => {
   if (badgeUpdateTimer) return;
@@ -59,8 +59,34 @@ const updateUnreadBadge = (chatId, unread) => {
   renderChatList();
 };
 
-const markRoomRead = async (roomId) => {
+const getRoomReadReceiptEntry = (roomId) => {
+  if (!roomReadReceipts.has(roomId)) {
+    roomReadReceipts.set(roomId, { timer: null, dirty: false, lastSentAt: 0 });
+  }
+  return roomReadReceipts.get(roomId);
+};
+
+const clearRoomReadTimer = (roomId) => {
+  const entry = roomReadReceipts.get(roomId);
+  if (!entry?.timer) return;
+  clearTimeout(entry.timer);
+  entry.timer = null;
+};
+
+const hasPendingRoomRead = (roomId) => Boolean(roomReadReceipts.get(roomId)?.dirty);
+
+const flushRoomRead = async (roomId, { force = false } = {}) => {
   if (!roomId) return;
+  const entry = getRoomReadReceiptEntry(roomId);
+  clearRoomReadTimer(roomId);
+  if (!force && !entry.dirty) return;
+  const nowMs = Date.now();
+  if (!force && nowMs - entry.lastSentAt < READ_RECEIPT_COOLDOWN_MS) {
+    scheduleRoomRead(roomId);
+    return;
+  }
+  entry.dirty = false;
+  entry.lastSentAt = nowMs;
   try {
     const data = await api.post(`/api/chat/rooms/${encodeURIComponent(roomId)}/read`, {});
     if (data?.otherLastReadAt || data?.lastReadAt) {
@@ -68,41 +94,32 @@ const markRoomRead = async (roomId) => {
         lastReadAt: data.lastReadAt || null,
         otherLastReadAt: data.otherLastReadAt || null
       };
-      renderMessages(roomId);
+      renderReadIndicators(roomId);
     }
     if (typeof data?.unreadCount === "number") {
       updateUnreadBadge(roomId, data.unreadCount);
     }
-  } catch {}
+  } catch {
+    entry.dirty = true;
+  }
 };
 
-const syncUnreadCounts = async () => {
-  if (!state.chats.length) return;
-  await syncProfile(false);
-  await Promise.all(
-    state.chats.map(async (c) => {
-      try {
-        const data = await api.get(`/api/chat/rooms/${encodeURIComponent(c.room || c.id)}/meta`);
-        if (typeof data?.unreadCount === "number") {
-          c.unread = data.unreadCount;
-        }
-        if (data?.displayName) {
-          c.name = data.displayName;
-        }
-        if (Array.isArray(data?.members)) {
-          c.memberIds = data.members.map((m) => (m?.email || "").toLowerCase()).filter(Boolean);
-        }
-        if (data?.otherLastReadAt || data?.lastReadAt) {
-          state.roomMeta[c.room || c.id] = {
-            lastReadAt: data.lastReadAt || null,
-            otherLastReadAt: data.otherLastReadAt || null
-          };
-        }
-      } catch {}
-    })
-  );
-  renderChatList();
+const scheduleRoomRead = (roomId, { immediate = false } = {}) => {
+  if (!roomId) return;
+  const entry = getRoomReadReceiptEntry(roomId);
+  entry.dirty = true;
+  clearRoomReadTimer(roomId);
+  const sinceLast = Date.now() - entry.lastSentAt;
+  const dueIn = immediate
+    ? Math.max(0, READ_RECEIPT_COOLDOWN_MS - sinceLast)
+    : Math.max(READ_RECEIPT_IDLE_MS, READ_RECEIPT_COOLDOWN_MS - sinceLast);
+  entry.timer = setTimeout(() => {
+    entry.timer = null;
+    flushRoomRead(roomId);
+  }, dueIn);
 };
+
+const markRoomRead = (roomId, options = {}) => flushRoomRead(roomId, options);
 const setScreen = (s) => {
   state.screen = s;
   const screens = $("screens");
@@ -121,12 +138,113 @@ const renderDateSeparator = (label) => {
   return el;
 };
 
+const getMessageTimeLabel = (m) => {
+  const label = formatTime(m.created_at);
+  return m.edited_at ? `${label} · Edited` : label;
+};
+
+const getMessageRenderOptions = (chatId, key) => {
+  const list = state.messages[chatId] || [];
+  const idx = list.findIndex((m) => getMessageKey(m) === key);
+  if (idx === -1) return { showMeta: true, showTime: true };
+  const prev = idx > 0 ? list[idx - 1] : null;
+  const curr = list[idx];
+  const grouped = isSameGroup(prev, curr);
+  return { showMeta: !grouped, showTime: !grouped };
+};
+
+const renderReadIndicators = (roomId = state.currentRoom) => {
+  if (!roomId || state.activeChatId !== roomId) return;
+  const otherReadAt = state.roomMeta[roomId]?.otherLastReadAt;
+  const currentUserEmail = String(state.currentUserEmail || "").toLowerCase();
+  const list = state.messages[roomId] || [];
+
+  list.forEach((message) => {
+    const key = getMessageKey(message);
+    const el = findMessageElement(roomId, key);
+    if (!el) return;
+
+    const shouldShow = Boolean(
+      otherReadAt
+      && message.status === "sent"
+      && currentUserEmail
+      && String(message.email || "").toLowerCase() === currentUserEmail
+      && new Date(otherReadAt).getTime() >= new Date(message.created_at).getTime()
+    );
+
+    const existing = el.querySelector(".read-indicator");
+    if (shouldShow && !existing) {
+      const read = document.createElement("div");
+      read.className = "read-indicator";
+      read.textContent = "Read";
+      el.appendChild(read);
+    } else if (!shouldShow && existing) {
+      existing.remove();
+    }
+  });
+};
+
+const replaceMessageElement = (chatId, key) => {
+  const el = findMessageElement(chatId, key);
+  if (!el) return false;
+  const msg = (state.messages[chatId] || []).find((item) => getMessageKey(item) === key);
+  if (!msg) return false;
+  const next = renderMessage(msg, getMessageRenderOptions(chatId, key));
+  el.replaceWith(next);
+  return true;
+};
+
+const setMessageActionsOpen = (actions, open) => {
+  if (!actions) return;
+  actions.classList.toggle("open", open);
+  const trigger = actions.querySelector(".message-options-btn");
+  if (trigger) {
+    trigger.setAttribute("aria-expanded", open ? "true" : "false");
+  }
+  if (open) {
+    openMessageActions = actions;
+  } else if (openMessageActions === actions) {
+    openMessageActions = null;
+  }
+};
+
+const closeMessageMenus = (except = null) => {
+  if (openMessageActions && openMessageActions !== except) {
+    setMessageActionsOpen(openMessageActions, false);
+  }
+  if (!except) {
+    openMessageActions = null;
+  }
+};
+
+const installMessageMenuDismiss = () => {
+  if (messageMenuDismissInstalled) return;
+  messageMenuDismissInstalled = true;
+
+  document.addEventListener("pointerdown", (event) => {
+    const path = typeof event.composedPath === "function" ? event.composedPath() : [];
+    const insideActions = path.some(
+      (node) => node instanceof Element && node.classList?.contains("message-actions")
+    );
+    if (!insideActions) {
+      closeMessageMenus();
+    }
+  }, true);
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeMessageMenus();
+    }
+  }, true);
+};
+
 const renderMessage = (m, { showMeta = true, showTime = true } = {}) => {
   const isSelf = state.currentUserEmail && m.email?.toLowerCase() === state.currentUserEmail;
   const el = document.createElement("div");
   el.className = `msg ${isSelf ? "sent" : "recv"}`;
   const key = getMessageKey(m);
   if (key) el.dataset.msgKey = key;
+  if (m.id) el.dataset.messageId = String(m.id);
 
   if (showMeta) {
     const meta = document.createElement("div");
@@ -144,8 +262,63 @@ const renderMessage = (m, { showMeta = true, showTime = true } = {}) => {
   if (showTime) {
     const time = document.createElement("div");
     time.className = "time";
-    time.textContent = formatTime(m.created_at);
+    time.textContent = getMessageTimeLabel(m);
     el.appendChild(time);
+  }
+
+  const showActions = canManageMessage(m, state.currentUserEmail);
+  if (showActions) {
+    el.classList.add("has-actions");
+    const actions = document.createElement("div");
+    actions.className = "message-actions";
+    actions.setAttribute("role", "group");
+    actions.setAttribute("aria-label", "Message actions");
+
+    const trigger = document.createElement("button");
+    trigger.className = "message-options-btn";
+    trigger.type = "button";
+    trigger.setAttribute("aria-label", "More actions");
+    trigger.setAttribute("aria-haspopup", "menu");
+    trigger.setAttribute("aria-expanded", "false");
+    trigger.textContent = "⋮";
+
+    const menu = document.createElement("div");
+    menu.className = "message-options-menu";
+    menu.setAttribute("role", "menu");
+
+    const editBtn = document.createElement("button");
+    editBtn.className = "message-action-btn";
+    editBtn.type = "button";
+    editBtn.textContent = "Edit";
+    editBtn.setAttribute("role", "menuitem");
+    editBtn.onclick = (event) => {
+      event.stopPropagation();
+      setMessageActionsOpen(actions, false);
+      beginMessageEdit(key);
+    };
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.className = "message-action-btn delete";
+    deleteBtn.type = "button";
+    deleteBtn.textContent = "Delete";
+    deleteBtn.setAttribute("role", "menuitem");
+    deleteBtn.onclick = (event) => {
+      event.stopPropagation();
+      setMessageActionsOpen(actions, false);
+      deleteMessageByKey(key);
+    };
+
+    trigger.onclick = (event) => {
+      event.stopPropagation();
+      const nextOpen = !actions.classList.contains("open");
+      closeMessageMenus(actions);
+      setMessageActionsOpen(actions, nextOpen);
+    };
+
+    menu.append(editBtn, deleteBtn);
+    actions.append(trigger, menu);
+    el.appendChild(actions);
+    installMessageMenuDismiss();
   }
 
   if (isSelf && m.status) {
@@ -201,58 +374,16 @@ const updateMessage = (chatId, key, updates = {}) => {
     msg.status = prevStatus;
   }
 
-  const el = findMessageElement(chatId, key);
-  if (!el) {
-    if (state.activeChatId === chatId) {
+  updateChatPreview(chatId);
+  saveStorage();
+  if (state.activeChatId === chatId) {
+    if (!replaceMessageElement(chatId, key)) {
       renderMessages(chatId);
+    } else {
+      renderReadIndicators(chatId);
     }
-    return;
   }
-
-  const timeEl = el.querySelector(".time");
-  if (timeEl) timeEl.textContent = formatTime(msg.created_at);
-
-  if (msg.status && state.currentUserEmail && msg.email?.toLowerCase() === state.currentUserEmail) {
-    let statusEl = el.querySelector(".status-indicator");
-    if (!statusEl) {
-      statusEl = document.createElement("div");
-      statusEl.className = "status-indicator";
-      el.appendChild(statusEl);
-    }
-    statusEl.className = `status-indicator ${msg.status}`;
-    statusEl.textContent = getStatusLabel(msg.status);
-  }
-
-  const readEl = el.querySelector(".read-indicator");
-  if (msg.status === "sent") {
-    const meta = state.roomMeta[state.currentRoom];
-    const otherReadAt = meta?.otherLastReadAt;
-    const isRead = otherReadAt && new Date(otherReadAt).getTime() >= new Date(msg.created_at).getTime();
-    if (isRead && !readEl) {
-      const read = document.createElement("div");
-      read.className = "read-indicator";
-      read.textContent = "Read";
-      el.appendChild(read);
-    } else if (!isRead && readEl) {
-      readEl.remove();
-    }
-  } else if (readEl) {
-    readEl.remove();
-  }
-
-  const existingRetry = el.querySelector(".retry-btn");
-  if (msg.status === "failed") {
-    if (!existingRetry) {
-      const retry = document.createElement("button");
-      retry.className = "retry-btn";
-      retry.type = "button";
-      retry.textContent = "Retry";
-      retry.onclick = () => retrySend(key);
-      el.appendChild(retry);
-    }
-  } else if (existingRetry) {
-    existingRetry.remove();
-  }
+  renderChatList();
 };
 
 const updateChatPreview = (chatId) => {
@@ -279,9 +410,7 @@ const removeMessage = (chatId, key) => {
   index.delete(key);
 
   if (state.activeChatId === chatId) {
-    const el = findMessageElement(chatId, key);
-    if (el) el.remove();
-    else renderMessages(chatId);
+    renderMessages(chatId);
   }
 
   updateChatPreview(chatId);
@@ -292,7 +421,8 @@ const removeMessage = (chatId, key) => {
 const renderMessages = (chatId) => {
   const el = $("messages");
   if (!el) return;
-  el.innerHTML = "";
+  closeMessageMenus();
+  el.replaceChildren();
   const list = state.messages[chatId] || [];
   let prev = null;
   list.forEach((m) => {
@@ -347,14 +477,14 @@ const prependMessages = (chatId, older) => {
   }
 };
 
-const renderChatList = () => {
+const renderChatListNow = () => {
   const el = $("chat-list");
   if (!el) return;
   const q = ($("search")?.value || "").toLowerCase();
   const sorted = [...state.chats].sort((a, b) => new Date(b.lastMessageAt || 0) - new Date(a.lastMessageAt || 0))
     .filter((c) => !q || c.name?.toLowerCase().includes(q) || c.lastMessage?.toLowerCase().includes(q));
 
-  el.innerHTML = "";
+  el.replaceChildren();
   if (!sorted.length) {
     const empty = document.createElement("div");
     empty.className = "empty";
@@ -405,6 +535,19 @@ const renderChatList = () => {
   updateBadges();
 };
 
+const renderChatList = (options = {}) => {
+  const immediate = options && typeof options === "object" && options.immediate === true;
+  if (immediate || typeof globalThis.requestAnimationFrame !== "function") {
+    renderChatListNow();
+    return;
+  }
+  if (chatListRenderFrame) return;
+  chatListRenderFrame = globalThis.requestAnimationFrame(() => {
+    chatListRenderFrame = null;
+    renderChatListNow();
+  });
+};
+
 const renderUsers = (listId, searchId, onSelect, options = {}) => {
   const el = $(listId);
   if (!el) return;
@@ -419,7 +562,7 @@ const renderUsers = (listId, searchId, onSelect, options = {}) => {
     return !q || name.includes(q) || email.includes(q);
   });
   
-  el.innerHTML = "";
+  el.replaceChildren();
   filtered.forEach((u) => {
     const item = document.createElement("div");
     item.className = "user-item";
@@ -463,7 +606,9 @@ const renderUsers = (listId, searchId, onSelect, options = {}) => {
   });
 
   // Only allow the inline "Start DM" add entry when the user is signed in
-  if (showAdd && q.includes("@") && state.currentUserEmail) {
+  // F4: Require a basic email format before showing the option.
+  const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (showAdd && EMAIL_RE.test(q) && state.currentUserEmail) {
     const add = document.createElement("div");
     add.className = "user-item";
     add.setAttribute("role", "button");

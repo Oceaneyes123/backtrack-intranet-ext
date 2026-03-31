@@ -6,11 +6,31 @@ const DEFAULTS = globalThis.BT_DEFAULTS || {
   chatApiUrl: ""
 };
 const AUTH_EVENT_KEY = "btAuthEvent";
+const LOCAL_API_URL_PATTERN = /^https?:\/\/(?:localhost|127(?:\.\d{1,3}){3})(?::\d+)?(?:\/|$)/i;
 
 let currentSettings = { ...DEFAULTS };
 
+const normalizeChatApiUrl = (value) => {
+  const trimmed = String(value || "").trim();
+  if (!trimmed) return DEFAULTS.chatApiUrl;
+  if (LOCAL_API_URL_PATTERN.test(trimmed)) return DEFAULTS.chatApiUrl;
+  return trimmed;
+};
+
+const persistChatApiUrlIfNeeded = (value) => {
+  if (!value || value === currentSettings.chatApiUrl) return;
+  safeStorageSet("sync", { chatApiUrl: value });
+};
+
 const applySettings = (next = {}, { apiUrlChanged = false } = {}) => {
-  currentSettings = { ...currentSettings, ...next, chatApiUrl: DEFAULTS.chatApiUrl };
+  currentSettings = { ...currentSettings, ...next };
+  const normalizedChatApiUrl = normalizeChatApiUrl(currentSettings.chatApiUrl);
+  const storedChatApiUrl = currentSettings.chatApiUrl;
+  currentSettings.chatApiUrl = normalizedChatApiUrl;
+  if (storedChatApiUrl !== normalizedChatApiUrl) {
+    persistChatApiUrlIfNeeded(normalizedChatApiUrl);
+    apiUrlChanged = true;
+  }
   const { chatEnabled, chatApiUrl } = currentSettings;
 
   try {
@@ -54,6 +74,10 @@ if (typeof chrome !== "undefined" && chrome.storage?.onChanged) {
       const next = {};
       let apiUrlChanged = false;
       if (changes.chatEnabled) next.chatEnabled = changes.chatEnabled.newValue;
+      if (changes.chatApiUrl) {
+        next.chatApiUrl = changes.chatApiUrl.newValue;
+        apiUrlChanged = true;
+      }
       if (!Object.keys(next).length) return;
       applySettings(next, { apiUrlChanged });
       return;
