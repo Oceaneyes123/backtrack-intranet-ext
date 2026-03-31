@@ -42,12 +42,20 @@ const decodeJwt = (token) => {
   } catch { return null; }
 };
 
+const canManageMessage = (message, currentUserEmail) => {
+  if (!message?.id || !currentUserEmail) return false;
+  const ownerEmail = String(message.email || "").toLowerCase();
+  if (!ownerEmail || ownerEmail !== String(currentUserEmail).toLowerCase()) return false;
+  return !message.status || message.status === "sent";
+};
+
 const normalizeMessage = (raw = {}, { fallbackId } = {}) => ({
   id: raw?.id || fallbackId || globalThis.crypto?.randomUUID?.() || String(Date.now()),
   author: raw?.display_name || raw?.displayName || raw?.email || "User",
   email: raw?.email,
   body: raw?.body || raw?.message || "",
   created_at: raw?.created_at || raw?.createdAt || new Date().toISOString(),
+  edited_at: raw?.edited_at || raw?.editedAt || null,
   client_message_id: raw?.client_message_id || raw?.clientMessageId
 });
 
@@ -61,4 +69,5 @@ globalThis.isSameDay = isSameDay;
 globalThis.formatTime = formatTime;
 globalThis.initials = initials;
 globalThis.decodeJwt = decodeJwt;
+globalThis.canManageMessage = canManageMessage;
 globalThis.normalizeMessage = normalizeMessage;

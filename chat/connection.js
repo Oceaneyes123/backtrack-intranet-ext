@@ -48,11 +48,144 @@ const disconnect = () => {
   closeSse();
   backoff = 1000;
   sseBackoff = 1000;
+  clearComposerEditing();
   setConnectionState(false);
 };
 
-const handleIncomingMessage = (roomId, d) => {
-  addMessage(roomId, normalizeMessage(d));
+const findMessageKey = (chatId, { key, id, clientMessageId } = {}) => {
+  if (key) {
+    const direct = ensureMessageIndex(chatId).get(key);
+    if (direct) return key;
+  }
+
+  const msgs = state.messages[chatId] || [];
+  const found = msgs.find((m) => {
+    if (id != null && String(m.id) === String(id)) return true;
+    if (clientMessageId && (m.client_message_id || m.clientMessageId) === clientMessageId) return true;
+    return false;
+  });
+
+  return found ? getMessageKey(found) : "";
+};
+
+const getMessageByKey = (chatId, key) => {
+  if (!chatId || !key) return null;
+  return (state.messages[chatId] || []).find((m) => getMessageKey(m) === key) || null;
+};
+
+const messagesEqual = (left = [], right = []) => {
+  if (left.length !== right.length) return false;
+  for (let i = 0; i < left.length; i += 1) {
+    const a = left[i];
+    const b = right[i];
+    if (!a || !b) return false;
+    if (getMessageKey(a) !== getMessageKey(b)) return false;
+    if ((a.id || null) !== (b.id || null)) return false;
+    if ((a.body || "") !== (b.body || "")) return false;
+    if ((a.created_at || "") !== (b.created_at || "")) return false;
+    if ((a.edited_at || "") !== (b.edited_at || "")) return false;
+    if ((a.email || "") !== (b.email || "")) return false;
+  }
+  return true;
+};
+
+const clearComposerEditing = () => {
+  const wasEditing = Boolean(state.editingMessageId || state.editingMessageKey);
+  state.editingMessageId = null;
+  state.editingMessageKey = null;
+  const input = $("input");
+  const cancelBtn = $("edit-cancel-btn");
+  const sendBtn = $("form")?.querySelector(".send-btn");
+  if (input) {
+    if (wasEditing) {
+      input.value = "";
+    }
+    input.placeholder = "Type a message…";
+  }
+  if (cancelBtn) {
+    cancelBtn.classList.add("hidden");
+  }
+  if (sendBtn) {
+    sendBtn.textContent = "Send";
+    sendBtn.setAttribute("aria-label", "Send message");
+  }
+  if (wasEditing) {
+    $("typing")?.classList.remove("show");
+  }
+};
+
+const beginMessageEdit = (key) => {
+  const chatId = state.activeChatId;
+  const message = getMessageByKey(chatId, key);
+  if (!canManageMessage(message, state.currentUserEmail)) return;
+
+  state.editingMessageId = message.id;
+  state.editingMessageKey = getMessageKey(message);
+
+  const input = $("input");
+  const cancelBtn = $("edit-cancel-btn");
+  const sendBtn = $("form")?.querySelector(".send-btn");
+  if (input) {
+    input.value = message.body || "";
+    input.placeholder = "Edit message…";
+    input.focus();
+    input.setSelectionRange(input.value.length, input.value.length);
+  }
+  if (cancelBtn) {
+    cancelBtn.classList.remove("hidden");
+  }
+  if (sendBtn) {
+    sendBtn.textContent = "Save";
+    sendBtn.setAttribute("aria-label", "Save message");
+  }
+  setStatus("Editing message");
+};
+
+const cancelMessageEdit = () => {
+  clearComposerEditing();
+  $("input")?.focus();
+  setStatus(state.currentRoom ? "Connected" : "Disconnected");
+};
+
+const applyEditedMessage = (roomId, payload) => {
+  const message = normalizeMessage(payload);
+  const key = findMessageKey(roomId, {
+    key: getMessageKey(message),
+    id: message.id,
+    clientMessageId: message.client_message_id
+  });
+  if (!key) return;
+  updateMessage(roomId, key, {
+    id: message.id,
+    body: message.body,
+    created_at: message.created_at,
+    edited_at: message.edited_at,
+    status: "sent"
+  });
+};
+
+const applyDeletedMessage = (roomId, payload) => {
+  const key = findMessageKey(roomId, {
+    id: payload?.messageId,
+    clientMessageId: payload?.clientMessageId
+  });
+  if (!key) return;
+  if (state.editingMessageKey === key) {
+    clearComposerEditing();
+  }
+  removeMessage(roomId, key);
+};
+
+const handleIncomingPayload = (roomId, payload) => {
+  if (payload?.type === "message.edited") {
+    applyEditedMessage(roomId, payload.message);
+    return;
+  }
+  if (payload?.type === "message.deleted") {
+    applyDeletedMessage(roomId, payload);
+    return;
+  }
+  addMessage(roomId, normalizeMessage(payload));
 };
 
 const handleWsAuthFailure = async (roomId) => {
@@ -111,7 +244,7 @@ const connectSse = async (roomId = state.currentRoom) => {
     }
   } catch {
     if (connectSeq !== sseConnectSeq || controller.signal.aborted || !reconnectEnabled) return;
-    setStatus("SSE connection failed");
+    setConnectionState(false);
     scheduleSseReconnect(roomId);
     return;
   }
@@ -127,7 +260,7 @@ const connectSse = async (roomId = state.currentRoom) => {
       setStatus("Forbidden");
       return;
     }
-    setStatus("SSE connection failed");
+    setConnectionState(false);
     scheduleSseReconnect(roomId);
     return;
   }
@@ -135,7 +268,6 @@ const connectSse = async (roomId = state.currentRoom) => {
   if (connectSeq !== sseConnectSeq) return;
   setConnectionState(true);
   sseBackoff = 1000;
-  flushPendingMessages();
 
   const reader = res.body.getReader();
   const decoder = new TextDecoder();
@@ -158,7 +290,7 @@ const connectSse = async (roomId = state.currentRoom) => {
         if (dataLines.length) {
           try {
             const payload = JSON.parse(dataLines.join("\n"));
-            handleIncomingMessage(roomId, payload);
+            handleIncomingPayload(roomId, payload);
           } catch {}
         }
         idx = buffer.indexOf("\n\n");
@@ -194,7 +326,6 @@ const connect = async (roomId = state.currentRoom) => {
     ws = new WebSocket(url, protocols);
     const fallbackTimer = setTimeout(() => {
       if (connectSeq !== wsConnectSeq || opened) return;
-      setStatus("WebSocket blocked, using SSE");
       connectSse(roomId);
     }, 3000);
     ws.onopen = () => {
@@ -204,12 +335,11 @@ const connect = async (roomId = state.currentRoom) => {
       closeSse();
       backoff = 1000;
       setConnectionState(true);
-      flushPendingMessages();
     };
     ws.onmessage = (e) => {
       try {
         const d = JSON.parse(e.data);
-        handleIncomingMessage(roomId, d);
+        handleIncomingPayload(roomId, d);
       } catch {}
     };
     ws.onclose = (event) => {
@@ -236,13 +366,12 @@ const connect = async (roomId = state.currentRoom) => {
     ws.onerror = () => {
       if (connectSeq !== wsConnectSeq) return;
       if (!opened) {
-        setStatus("WebSocket blocked, using SSE");
         connectSse(roomId);
       }
       setConnectionState(false);
     };
   } catch {
-    setStatus("Connection failed");
+    setConnectionState(false);
     connectSse(roomId);
   }
 };
@@ -255,6 +384,7 @@ const loadHistory = async ({ before } = {}) => {
     if (before) {
       prependMessages(state.currentRoom, msgs);
     } else {
+      const previous = state.messages[state.currentRoom] || [];
       state.messages[state.currentRoom] = msgs;
       const index = ensureMessageIndex(state.currentRoom);
       index.clear();
@@ -262,11 +392,9 @@ const loadHistory = async ({ before } = {}) => {
         const key = getMessageKey(m);
         if (key) index.set(key, m);
       });
-      renderMessages(state.currentRoom);
-    }
-
-    if (!before) {
-      mergePendingForRoom(state.currentRoom);
+      if (!messagesEqual(previous, msgs)) {
+        renderMessages(state.currentRoom);
+      }
     }
 
     if (!before && (data?.otherLastReadAt || data?.lastReadAt)) {
@@ -274,7 +402,7 @@ const loadHistory = async ({ before } = {}) => {
         lastReadAt: data.lastReadAt || null,
         otherLastReadAt: data.otherLastReadAt || null
       };
-      renderMessages(state.currentRoom);
+      renderReadIndicators(state.currentRoom);
     }
 
     if (!before && typeof data?.unreadCount === "number") {
@@ -303,109 +431,23 @@ const loadOlderMessages = async () => {
   await loadHistory({ before });
 };
 
-const restorePendingMessages = () => {
-  if (!pendingSends.size) return;
-  pendingSends.forEach((p) => {
-    if (!p?.room || !p?.clientMessageId) return;
-    const chatId = p.room;
-    const msg = {
-      id: p.tempId || crypto.randomUUID(),
-      author: state.currentUserName,
-      email: state.currentUserEmail,
-      body: p.body,
-      created_at: p.createdAt || new Date().toISOString(),
-      client_message_id: p.clientMessageId,
-      status: p.status || "failed"
-    };
-    addMessage(chatId, msg, { unread: false, render: chatId === state.activeChatId });
-  });
-};
-
-const mergePendingForRoom = (chatId) => {
-  if (!pendingSends.size || !chatId) return;
-  pendingSends.forEach((p) => {
-    if (p?.room !== chatId || !p?.clientMessageId) return;
-    const msg = {
-      id: p.tempId || crypto.randomUUID(),
-      author: state.currentUserName,
-      email: state.currentUserEmail,
-      body: p.body,
-      created_at: p.createdAt || new Date().toISOString(),
-      client_message_id: p.clientMessageId,
-      status: p.status || "failed"
-    };
-    addMessage(chatId, msg, { unread: false, render: true });
-  });
-};
-
-const queuePendingMessage = (payload) => {
-  if (!payload?.clientMessageId) return;
-  pendingSends.set(payload.clientMessageId, payload);
-  savePendingStorage();
-  updateQueueIndicator();
-};
-
-const clearPendingMessage = (clientMessageId) => {
-  if (!pendingSends.has(clientMessageId)) return;
-  pendingSends.delete(clientMessageId);
-  savePendingStorage();
-  updateQueueIndicator();
-};
-
-const trySendPending = async (payload) => {
-  if (!payload?.room || !payload?.clientMessageId) return false;
-  try {
-    updateMessage(payload.room, payload.clientMessageId, { status: "sending" });
-    const res = await api.post(`/api/chat/rooms/${encodeURIComponent(payload.room)}/messages`, {
-      body: payload.body,
-      clientMessageId: payload.clientMessageId
-    });
-    updateMessage(payload.room, payload.clientMessageId, {
-      id: res?.id || payload.tempId,
-      created_at: res?.created_at || new Date().toISOString(),
-      status: "sent"
-    });
-    clearPendingMessage(payload.clientMessageId);
-    return true;
-  } catch {
-    updateMessage(payload.room, payload.clientMessageId, { status: "failed" });
-    return false;
-  }
-};
-
-const flushPendingMessages = async () => {
-  if (flushInFlight || !navigator.onLine || !pendingSends.size) return;
-  flushInFlight = true;
-  const items = Array.from(pendingSends.values());
-  for (const payload of items) {
-    await trySendPending(payload);
-  }
-  flushInFlight = false;
-  updateQueueIndicator();
-};
-
-const retrySend = async (clientMessageId) => {
-  if (!clientMessageId) return;
-  const payload = pendingSends.get(clientMessageId);
-  if (!payload) return;
-  await trySendPending(payload);
-};
-
 const openChat = async (chatId) => {
   const chat = state.chats.find((c) => c.id === chatId);
   if (!chat) return;
+
+  clearComposerEditing();
   
   state.activeChatId = chatId;
   state.currentRoom = chat.room || chat.id;
   chat.unread = 0;
   
-  const nameEl = $("active-name");
+  const nameEl = $("active-name-label");
   if (nameEl) nameEl.textContent = chat.name || "Chat";
   
   setScreen("chat");
   renderMessages(chatId);
   await loadHistory();
-  await markRoomRead(state.currentRoom);
+  await markRoomRead(state.currentRoom, { force: true });
   $("input")?.focus();
   await connect(state.currentRoom);
 };
@@ -457,8 +499,60 @@ const createGroup = async (name, members) => {
   }
 };
 
+const saveEditedMessage = async (body) => {
+  if (!body.trim() || !state.activeChatId || !state.editingMessageId || !state.editingMessageKey) return;
+  if (body.length > 4000) {
+    setStatus("Message too long (max 4000 characters)");
+    return;
+  }
+
+  try {
+    const res = await api.patch(`/api/chat/rooms/${encodeURIComponent(state.currentRoom)}/messages/${encodeURIComponent(state.editingMessageId)}`, { body });
+    updateMessage(state.activeChatId, state.editingMessageKey, {
+      body: res?.body || body,
+      edited_at: res?.edited_at || new Date().toISOString(),
+      status: "sent"
+    });
+    clearComposerEditing();
+    setStatus("Message updated");
+  } catch {
+    setStatus("Failed to update message");
+  }
+};
+
+const deleteMessageByKey = async (key) => {
+  const message = getMessageByKey(state.activeChatId, key);
+  if (!message?.id) return;
+  if (typeof globalThis.confirm === "function" && !globalThis.confirm("Delete this message?")) {
+    return;
+  }
+
+  try {
+    await api.delete(`/api/chat/rooms/${encodeURIComponent(state.currentRoom)}/messages/${encodeURIComponent(message.id)}`);
+    if (state.editingMessageKey === key) {
+      clearComposerEditing();
+    }
+    removeMessage(state.activeChatId, key);
+    setStatus("Message deleted");
+  } catch {
+    setStatus("Failed to delete message");
+  }
+};
+
+const submitComposer = async (body) => {
+  if (state.editingMessageId) {
+    await saveEditedMessage(body);
+    return;
+  }
+  await sendMessage(body);
+};
+
 const sendMessage = async (body) => {
   if (!body.trim() || !state.activeChatId) return;
+  if (body.length > 4000) {
+    setStatus("Message too long (max 4000 characters)");
+    return;
+  }
   
   if (!state.currentUserEmail) await syncProfile(false);
   if (!state.currentUserEmail) await syncProfile(true);
@@ -466,50 +560,39 @@ const sendMessage = async (body) => {
     setStatus("Sign in required");
     return;
   }
+  const chatId = state.activeChatId;
+  const roomId = state.currentRoom;
   const clientMessageId = crypto.randomUUID();
   const tempId = crypto.randomUUID();
+  const createdAt = new Date().toISOString();
   
-  addMessage(state.activeChatId, {
+  addMessage(chatId, {
     id: tempId,
     author: state.currentUserName,
     email: state.currentUserEmail,
     body,
-    created_at: new Date().toISOString(),
+    created_at: createdAt,
     client_message_id: clientMessageId,
     status: "sending"
   }, { unread: false });
-
-
-  queuePendingMessage({
-    room: state.currentRoom,
-    body,
-    clientMessageId,
-    tempId,
-    createdAt: new Date().toISOString(),
-    status: "sending"
-  });
   
   try {
-    const res = await api.post(`/api/chat/rooms/${encodeURIComponent(state.currentRoom)}/messages`, { body, clientMessageId: clientMessageId });
-    updateMessage(state.activeChatId, clientMessageId, {
+    const res = await api.post(`/api/chat/rooms/${encodeURIComponent(roomId)}/messages`, { body, clientMessageId });
+    updateMessage(chatId, clientMessageId, {
       id: res?.id || tempId,
-      created_at: res?.created_at || new Date().toISOString(),
+      created_at: res?.created_at || createdAt,
       status: "sent"
     });
-    clearPendingMessage(clientMessageId);
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      await connect(state.currentRoom);
+      await connect(roomId);
     }
   } catch {
-    updateMessage(state.activeChatId, clientMessageId, { status: "failed" });
-    queuePendingMessage({
-      room: state.currentRoom,
-      body,
-      clientMessageId,
-      tempId,
-      createdAt: new Date().toISOString(),
-      status: "failed"
-    });
+    removeMessage(chatId, clientMessageId);
     setStatus("Failed to send");
   }
 };
+
+globalThis.beginMessageEdit = beginMessageEdit;
+globalThis.cancelMessageEdit = cancelMessageEdit;
+globalThis.deleteMessageByKey = deleteMessageByKey;
+globalThis.submitComposer = submitComposer;

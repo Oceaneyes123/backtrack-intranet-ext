@@ -19,6 +19,8 @@ const state = {
   currentRoom: DEFAULT_ROOM,
   currentUserEmail: null,
   currentUserName: "You",
+  editingMessageId: null,
+  editingMessageKey: null,
   oldestMessageAt: {},
   hasMore: {},
   roomMeta: {}
@@ -37,9 +39,6 @@ let shadow = null;
 // Helpers
 const $ = (id) => shadow?.getElementById(id);
 const messageIndex = new Map();
-const pendingSends = new Map();
-let flushInFlight = false;
-let readReceiptTimer = null;
 const ensureMessageIndex = (chatId) => {
   if (!messageIndex.has(chatId)) messageIndex.set(chatId, new Map());
   return messageIndex.get(chatId);
@@ -48,7 +47,6 @@ const ensureMessageIndex = (chatId) => {
 const getStatusLabel = (status) => {
   if (status === "sending") return "Sending…";
   if (status === "sent") return "Sent";
-  if (status === "failed") return "Failed";
   return "";
 };
 

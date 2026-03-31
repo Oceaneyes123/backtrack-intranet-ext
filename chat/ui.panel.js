@@ -94,19 +94,10 @@ const hydrateSignedInState = async ({ interactive = false } = {}) => {
   const data = await loadStorage();
   state.chats = data[KEYS.chats] || [];
   state.users = data[KEYS.users] || [];
-  const pendingData = await loadPendingStorage();
-  (pendingData[KEYS.pending] || []).forEach((p) => {
-    if (p?.clientMessageId) pendingSends.set(p.clientMessageId, p);
-  });
   upsertUser(state.currentUserEmail, state.currentUserName);
   await syncRoomsFromServer({ interactive, replace: true });
-  ensureGeneral();
-  await syncRoomsFromServer({ interactive: false });
-  restorePendingMessages();
-  updateQueueIndicator();
   saveStorage();
   renderChatList();
-  await syncUnreadCounts();
   setScreen("list");
   $("search")?.focus();
 
@@ -116,7 +107,7 @@ const hydrateSignedInState = async ({ interactive = false } = {}) => {
 const renderChips = () => {
   const el = $("group-chips");
   if (!el) return;
-  el.innerHTML = "";
+  el.replaceChildren();
   selectedEmails.forEach((e) => {
     const chip = document.createElement("span");
     chip.className = "chip";
@@ -156,6 +147,7 @@ const openPanel = async () => {
   if (!panel) return;
   previouslyFocused = document.activeElement;
   panel.classList.add("open");
+  $("launcher")?.classList.add("panel-open");
   state.panelOpen = true;
   panel.focus();
   installFocusTrap();
@@ -172,7 +164,11 @@ const closePanel = () => {
   const panel = $("panel");
   if (!panel) return;
   panel.classList.remove("open");
+  $("launcher")?.classList.remove("panel-open");
   state.panelOpen = false;
+  if (hasPendingRoomRead(state.currentRoom)) {
+    flushRoomRead(state.currentRoom, { force: true });
+  }
   disconnect();
   setScreen("list");
   try {
@@ -188,16 +184,17 @@ const closePanel = () => {
 const installGlobalListeners = () => {
   if (globalListenersInstalled) return;
   globalListenersInstalled = true;
-  window.addEventListener("online", () => { updateQueueIndicator(); flushPendingMessages(); });
-  window.addEventListener("offline", updateQueueIndicator);
 
   document.addEventListener("keydown", (e) => {
     if (widgetRoot?.style.display === "none") return;
     const panel = $("panel");
     const isOpen = panel?.classList.contains("open");
     if (e.key === "Escape" && isOpen) {
-      if (state.screen !== "list") setScreen("list");
-      else { closePanel(); }
+      if (state.screen !== "list") {
+        setScreen("list");
+        // F6: Return focus to search input after navigating back.
+        $("search")?.focus();
+      } else { closePanel(); }
       return;
     }
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
@@ -238,17 +235,17 @@ const onAuthStateChanged = async () => {
   }
 
   renderChatList();
-  await syncUnreadCounts();
+  await syncRoomsFromServer({ interactive: false, replace: true });
 };
 
 const initializePanelUi = () => {
   if (panelInitialized) return;
   panelInitialized = true;
 
-  $("launcher").onclick = async () => {
+  $("launcher").onclick = safeCall(async () => {
     if (isPanelOpen()) closePanel();
     else await openPanel();
-  };
+  });
   $("launcher").onkeydown = (e) => {
     if (e.key === "Enter" || e.key === " ") {
       e.preventDefault();
@@ -260,7 +257,7 @@ const initializePanelUi = () => {
     closePanel();
   };
 
-  $("auth-banner-signin").onclick = async () => {
+  $("auth-banner-signin").onclick = safeCall(async () => {
     const signinBtn = $("auth-banner-signin");
     if (signinBtn) signinBtn.disabled = true;
     await syncProfile(true);
@@ -268,7 +265,7 @@ const initializePanelUi = () => {
     if (state.currentUserEmail) {
       await hydrateSignedInState({ interactive: true });
     }
-  };
+  });
 
   $("signout-btn").onclick = async () => {
     safeSendMessage({ type: "bt-auth:sign-out" }, () => {
@@ -279,7 +276,7 @@ const initializePanelUi = () => {
     });
   };
 
-  $("new-btn").onclick = async () => {
+  $("new-btn").onclick = safeCall(async () => {
     await syncProfile(false);
     setScreen("new");
     setTab("dm");
@@ -287,7 +284,7 @@ const initializePanelUi = () => {
     renderChips();
     renderGroupUsers();
     $("dm-search")?.focus();
-  };
+  });
 
   $("back-btn").onclick = () => { disconnect(); setScreen("list"); };
   $("new-back-btn").onclick = () => setScreen("list");
@@ -299,25 +296,27 @@ const initializePanelUi = () => {
   $("dm-search").oninput = () => renderUsers("dm-users", "dm-search", (u) => startDM(u.email, u.name), { showAdd: true });
   $("group-search").oninput = renderGroupUsers;
 
-  $("group-create").onclick = async () => {
+  $("group-create").onclick = safeCall(async () => {
     const name = $("group-name")?.value.trim();
     await createGroup(name, [...selectedEmails]);
     selectedEmails.clear();
     renderChips();
     renderGroupUsers();
-  };
+  });
 
   $("input").oninput = (e) => $("typing").classList.toggle("show", !!e.target.value.trim());
 
-  $("form").onsubmit = async (e) => {
+  $("edit-cancel-btn").onclick = () => cancelMessageEdit();
+
+  $("form").onsubmit = safeCall(async (e) => {
     e.preventDefault();
     const input = $("input");
     const val = input.value.trim();
     if (!val) return;
     input.value = "";
     $("typing").classList.remove("show");
-    await sendMessage(val);
-  };
+    await submitComposer(val);
+  });
 
   $("load-older").onclick = loadOlderMessages;
 

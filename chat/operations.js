@@ -27,10 +27,15 @@ const syncRoomsFromServer = async ({ interactive = false, replace = false } = {}
   try {
     const data = await api.get("/api/chat/rooms", { interactive });
     const rooms = Array.isArray(data?.rooms) ? data.rooms : [];
-    if (!rooms.length) return;
-
     if (replace) {
       state.chats = [];
+      state.roomMeta = {};
+    }
+
+    if (!rooms.length) {
+      saveStorage();
+      renderChatList();
+      return;
     }
 
     rooms.forEach((room) => {
@@ -49,10 +54,17 @@ const syncRoomsFromServer = async ({ interactive = false, replace = false } = {}
         unread: typeof room.unread === "number" ? room.unread : 0,
         memberIds: memberIds.length ? memberIds : room.memberIds || undefined
       });
+      state.roomMeta[roomId] = {
+        lastReadAt: room.lastReadAt || room.last_read_at || null,
+        otherLastReadAt: room.otherLastReadAt || room.other_last_read_at || null
+      };
     });
     saveStorage();
     renderChatList();
-  } catch {}
+  } catch {
+    // F9: Surface a user-visible indicator when the backend is unreachable.
+    setStatus("Backend unreachable — showing cached data");
+  }
 };
 
 const addMessage = (chatId, msg, { render = true, unread = true } = {}) => {
@@ -86,8 +98,7 @@ const addMessage = (chatId, msg, { render = true, unread = true } = {}) => {
       el.scrollTop = el.scrollHeight;
     }
     if (msg.email && msg.email.toLowerCase() !== state.currentUserEmail?.toLowerCase()) {
-      if (readReceiptTimer) clearTimeout(readReceiptTimer);
-      readReceiptTimer = setTimeout(() => markRoomRead(chatId), 600);
+      scheduleRoomRead(chatId);
     }
   }
   saveStorage();
