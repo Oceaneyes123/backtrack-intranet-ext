@@ -5,6 +5,7 @@ let sseBackoff = 1000;
 let sseRoom = null;
 let sseConnectSeq = 0;
 let wsAuthRetryInFlight = false;
+const pendingDmRequests = new Set();
 
 const clearReconnectTimer = () => {
   if (!reconnectTimer) return;
@@ -452,17 +453,64 @@ const openChat = async (chatId) => {
   await connect(state.currentRoom);
 };
 
+const findExistingDirectChat = (email) => {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) return null;
+  return state.chats.find((chat) =>
+    chat?.type === "dm"
+    && Array.isArray(chat.memberIds)
+    && chat.memberIds.includes(normalizedEmail)
+  ) || null;
+};
+
 const startDM = async (email, name) => {
+  const normalizedEmail = String(email || "").trim().toLowerCase();
+  if (!normalizedEmail) {
+    setStatus("Email required");
+    return;
+  }
+
+  const existingChat = findExistingDirectChat(normalizedEmail);
+  if (existingChat) {
+    await openChat(existingChat.id);
+    return;
+  }
+
+  if (pendingDmRequests.has(normalizedEmail)) {
+    setStatus("Starting chat");
+    return;
+  }
+
   await syncProfile(false);
   if (!state.currentUserEmail) {
     await syncProfile(true);
   }
+  if (!state.currentUserEmail) {
+    setStatus("Sign in required");
+    return;
+  }
+
+  pendingDmRequests.add(normalizedEmail);
+  setStatus("Starting chat");
   try {
-    const data = await api.post("/api/chat/direct", { email });
-    const chat = ensureChat({ id: data.room, room: data.room, type: "dm", name: name || email, lastMessage: "", lastMessageAt: new Date().toISOString(), unread: 0 });
+    const data = await api.post("/api/chat/direct", { email: normalizedEmail });
+    const chat = ensureChat({
+      id: data.room,
+      room: data.room,
+      type: "dm",
+      name: name || normalizedEmail,
+      lastMessage: "",
+      lastMessageAt: new Date().toISOString(),
+      unread: 0,
+      memberIds: [state.currentUserEmail, normalizedEmail]
+    });
     saveStorage();
     await openChat(chat.id);
-  } catch { setStatus("Failed to start DM"); }
+  } catch {
+    setStatus("Failed to start DM");
+  } finally {
+    pendingDmRequests.delete(normalizedEmail);
+  }
 };
 
 const createGroup = async (name, members) => {

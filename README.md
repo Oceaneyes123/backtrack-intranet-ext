@@ -71,7 +71,8 @@ A Chrome extension that redirects the New Tab page to the Backtrack company intr
 Click the extension icon to open the popup:
 - **Make Intranet My New Tab** — toggle the new-tab redirect
 - **Chat Widget** — enable/disable the floating chat panel
-- **Sign In / Sign Out** — authenticate with your Google account
+- **Signed-in status + Sign In / Sign Out** — authenticate with your Google account
+- **Chat Backend preset** — switch between `Production` and `Local (localhost:8787)`
 
 ---
 
@@ -103,8 +104,9 @@ All user-facing settings are managed through the popup UI and persisted in `chro
 |---------|-------------|---------|-------------|
 | New Tab redirect | `rerouteEnabled` | `true` | Replace Chrome's new tab with the intranet |
 | Chat Widget | `chatEnabled` | `true` | Show the floating chat widget on intranet pages |
+| Chat Backend | `chatApiEnvironment` | `production` | Select the backend preset used by the chat widget |
 
-The backend API URL is configured in [shared/settings.js](shared/settings.js) and defaults to the production endpoint.
+Backend endpoints are preset-based and defined in [shared/settings.js](shared/settings.js).
 
 ---
 
@@ -142,7 +144,7 @@ cd backend
 npm test
 ```
 
-This runs both backend tests (18) and chat widget tests (6) — **24 tests** total.
+This runs both backend tests (31) and chat widget tests (8) — **39 tests** total.
 
 ---
 

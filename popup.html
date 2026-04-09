@@ -14,6 +14,7 @@
       <h1 class="title">Backtrack Intranet</h1>
     </header>
     <main class="card">
+      <!-- Toggles -->
       <div class="toggle-container">
         <div class="toggle-info">
           <span class="toggle-label">Make Intranet My New Tab</span>
@@ -34,6 +35,27 @@
           <input id="chat-enabled" type="checkbox" />
           <span class="slider"></span>
         </label>
+      </div>
+      <div class="divider"></div>
+      <!-- Auth section -->
+      <div class="auth-section">
+        <div class="auth-status-row">
+          <span class="auth-status-label">Signed in as</span>
+          <span id="auth-status" class="auth-status-value">Checking…</span>
+        </div>
+        <div class="auth-actions">
+          <button id="sign-in-btn" class="btn btn-primary" hidden>Sign in with Google</button>
+          <button id="sign-out-btn" class="btn btn-secondary" hidden>Sign out</button>
+        </div>
+      </div>
+      <div class="divider"></div>
+      <!-- Backend environment -->
+      <div class="field">
+        <label for="env-select" class="field-label">Chat Backend</label>
+        <select id="env-select" class="env-select">
+          <option value="production">Production</option>
+          <option value="local">Local (localhost:8787)</option>
+        </select>
       </div>
     </main>
   </body>

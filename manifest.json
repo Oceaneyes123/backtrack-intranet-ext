@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Backtrack Intranet",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "description": "Backtrack Intranet",
   "icons": {
     "16": "icon.png",
